@@ -17,9 +17,17 @@ class Graph:
 		if b in godot_built_in_types(): # TODO: cache?
 			# Ignore if b is a Godot type.
 			return
+		a=f'"{a}"'
+		b=f'"{b}"'
 		if not self.nodes.get(a):
 			self.nodes[a]=set()
 		self.nodes[a].add(b)
+
+	def rank(self)->str:
+		""" Rank nodes and return string containing DOT rank instructions. """
+		rank_dict:dict=swapped_dict({k:len(v) for k,v in self.nodes.items()})
+		sorted_ranks:list=sorted(rank_dict.items(),reverse=True)
+		return "\n".join(["{rank=same;"+";".join(x[1])+";}" for x in sorted_ranks])
 
 	def __str__(self)->str:
 		""" DOT language output. """
@@ -32,7 +40,9 @@ class Graph:
 			if k.endswith('.gd"'):
 				s+=f"{k} [style=filled];\n"
 		# Additional formatting.
-		s+="beautify=true;pack=true;rankdir=LR;\n"
+		s+="beautify=true;pack=false;rankdir=LR;\n"
+		# Rank.
+		s+=self.rank()
 		return f"digraph {{\n{s}}}"
 
 def godot_built_in_types()->set[str]:
@@ -99,3 +109,10 @@ def project_scripts(path:str)->list[str]:
 			if file.endswith(".gd"):
 				result.append(os.path.join(root,file))
 	return result
+
+def swapped_dict(d:dict)->dict:
+	""" Return new dict where keys and values are swapped. """
+	x:dict={}
+	for k,v in d.items():
+		x.setdefault(v,[]).append(k)
+	return x

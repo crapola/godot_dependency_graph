@@ -28,7 +28,7 @@ def main()->None:
 			print(se.text)
 			continue
 		file_base_name:str=f.rsplit("\\")[-1]
-		class_name=class_name or f'"{file_base_name}"'
+		class_name=class_name or file_base_name
 		for d in deps:
 			# Handle typed containers.
 			if "[" in d:

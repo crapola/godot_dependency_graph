@@ -1,69 +1,16 @@
 """
 Classes and functions for the graph generator.
 """
-import os
+import functools
+import pathlib
+import typing
 
 import gdtoolkit.parser
 import lark
 
 
-class Graph:
-	""" Graph structure. """
-	def __init__(self)->None:
-		self.nodes:dict[str,set[str]]={}
-
-	def add(self,a:str,b:str)->None:
-		""" Add relation a -> b """
-		if b in godot_built_in_types(): # TODO: cache?
-			# Ignore if b is a Godot type.
-			return
-		a=f'"{a}"'
-		b=f'"{b}"'
-		if not self.nodes.get(a):
-			self.nodes[a]=set()
-		self.nodes[a].add(b)
-
-	def rank(self)->str:
-		""" Rank nodes and return string containing DOT rank instructions. """
-		rank_dict:dict=swapped_dict({k:len(v) for k,v in self.nodes.items()})
-		sorted_ranks:list=sorted(rank_dict.items(),reverse=True)
-		return "\n".join(["{rank=same;"+";".join(x[1])+";}" for x in sorted_ranks])
-
-	def __str__(self)->str:
-		""" DOT language output. """
-		s:str=""
-		for k,v in self.nodes.items():
-			for b in v:
-				s+=f"\t{k} -> {b};\n"
-		# Grey background for scripts.
-		for k in self.nodes:
-			if k.endswith('.gd"'):
-				s+=f"{k} [style=filled];\n"
-		# Additional formatting.
-		s+="beautify=true;pack=false;rankdir=LR;\n"
-		# Rank.
-		s+=self.rank()
-		return f"digraph {{\n{s}}}"
-
-def godot_built_in_types()->set[str]:
-	"""
-	Get set of all built-in types and native classes.
-
-	class_list.txt was generated in Godot using:
-		FileAccess.open("res://class_list.txt",FileAccess.WRITE).store_csv_line(ClassDB.get_class_list())
-
-	built_ins.txt was hand written...
-	"""
-	def local_path(filename:str)->str:
-		return os.path.join(os.path.dirname(__file__),filename)
-	with open(local_path("class_list.txt"),"rt",encoding="utf-8") as f1,\
-		 open(local_path("built_ins.txt"),"rt",encoding="utf-8") as f2:
-		classes=set(f1.read().split(","))
-		built_ins=set(f2.read().split("\n"))
-		return classes.union(built_ins)
-
-def load_script(path:str)->str:
-	""" Load script into string. """
+def load_string(path:pathlib.Path)->str:
+	""" Load a string from file at <path>. """
 	with open(path,"rt",encoding="utf-8") as f:
 		return f.read()
 
@@ -99,20 +46,50 @@ def parse_script(text:str)->tuple[str|None,set[str]]:
 	collected_tokens=set(x.value for x in list(tokens))
 	if extends:
 		collected_tokens.add(extends)
+	# Split combined types such as Array[float].
+	x:str
+	removed:list=[]
+	added:list=[]
+	for x in collected_tokens:
+		if "[" in x:# or "." in x:
+			types:list[str]=x.replace(".","[").replace("]","[").split("[")[:2]
+			removed.append(x)
+			added+=types
+	if removed:
+		for x in removed:
+			collected_tokens.remove(x)
+	if added:
+		for x in added:
+			collected_tokens.add(x)
+
+	# Remove built-in types.
+	godot_types:set[str]=godot_built_in_types()
+	collected_tokens.difference_update(godot_types)
 	return (class_name,collected_tokens)
 
-def project_scripts(path:str)->list[str]:
-	""" Return list of GDScript files in the project located at <path>. """
-	result:list[str]=[]
-	for root,_dirs,files in os.walk(path):
-		for file in files:
-			if file.endswith(".gd"):
-				result.append(os.path.join(root,file))
-	return result
+def project_script_paths(path:pathlib.Path)->list[pathlib.Path]:
+	"""
+	List absolute paths to GDScript files (.gd) in the project
+	located at <path>, including the content of addons/.
+	"""
+	scripts:typing.Generator[pathlib.Path,None,None]=path.rglob("*.gd")
+	return list(scripts)
 
-def swapped_dict(d:dict)->dict:
-	""" Return new dict where keys and values are swapped. """
-	x:dict={}
-	for k,v in d.items():
-		x.setdefault(v,[]).append(k)
-	return x
+@functools.cache
+def godot_built_in_types()->set[str]:
+	"""
+	Get set of all built-in types and native classes.
+
+	class_list.txt was generated in Godot using:
+		FileAccess.open("res://class_list.txt",FileAccess.WRITE).store_csv_line(ClassDB.get_class_list())
+
+	built_ins.txt was hand written...
+	"""
+	def local_path(filename:str)->pathlib.Path:
+		return pathlib.Path(__file__).parent.joinpath(pathlib.Path(filename))
+	with open(local_path("class_list.txt"),"rt",encoding="utf-8") as f1,\
+		 open(local_path("built_ins.txt"),"rt",encoding="utf-8") as f2:
+		classes=set(f1.read().split(","))
+		built_ins=set(f2.read().split("\n"))
+		#print("Loaded:",f1,f2)
+		return classes.union(built_ins)

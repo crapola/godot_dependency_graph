@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import NamedTuple, Self
 
 import analyzer
-import formatting
+from formatting import wrap_indented_block
 import graph
 
 
@@ -46,7 +46,7 @@ class Script(NamedTuple):
 	dependencies:set[str] # Types referenced in the script.
 
 	@classmethod
-	def open(cls,project:Path,script:Path)->Self:
+	def open(cls,script:Path,addon:str)->Self:
 		"""
 		Get information from script, or None in case of parse errors.
 		Both paths are absolute.
@@ -60,18 +60,8 @@ class Script(NamedTuple):
 			print_error(f"Parse error when processing {script} at line {se.lineno}, column {se.offset}:")
 			print_error(se.text)
 			raise se
-			#return None
 		class_name=class_name or script.name
-		addon_name:str=Script._addon_from_path(script.relative_to(project))
-		return cls(addon_name,class_name,deps)
-
-	@staticmethod
-	def _addon_from_path(relative_file_path:Path)->str:
-		""" Return the addons/ folder name a file belongs to, or empty string. """
-		addon_name:str=""
-		if relative_file_path.parts[0]=="addons":
-			addon_name=relative_file_path.parts[1]
-		return addon_name
+		return cls(addon,class_name,deps)
 
 class Project(NamedTuple):
 	""" Project information. """
@@ -87,15 +77,25 @@ class Project(NamedTuple):
 		scripts:list[Script]=[]
 		for x in gd_paths:
 			try:
-				s:Script=Script.open(path,x)
+				addon:str=cls._addon_from_path(x.relative_to(path))
+				s:Script=Script.open(x,addon)
 				if args.class_only and s.name.endswith(".gd"):
 					continue
 				scripts.append(s)
+			# pylint: disable=broad-except
 			except Exception as e:
 				print_error("Skipping",x)
 				print_error("Reason:",e)
 				continue
 		return cls(path.stem,path,scripts)
+
+	@classmethod
+	def _addon_from_path(cls,relative_file_path:Path)->str:
+		""" Return the addon a file belongs to, or empty string. """
+		addon_name:str=""
+		if relative_file_path.parts[0]=="addons":
+			addon_name=relative_file_path.parts[1]
+		return addon_name
 
 def dot_from_project(project:Project)->str:
 	""" Create the .dot text. """
@@ -104,7 +104,6 @@ def dot_from_project(project:Project)->str:
 	for script in project.scripts:
 		for d in script.dependencies:
 			g.add(script.name,d)
-	rels:str=str(g)
 
 	# TODO: bidirectional arrows
 	# A->B and B->A should become
@@ -112,12 +111,7 @@ def dot_from_project(project:Project)->str:
 	# and color those red
 	#rels='\n'.join([x[:-1]+' [color="blue:red;0.001"]' for x in rels.splitlines()])
 
-	digraph_stuff:str=";\n".join((
-		"rankdir=LR", # Left to right.
-		'',
-	))
-
-	body:str=digraph_stuff+rels
+	body:str=str(g)
 
 	# Give classless scripts a grey background.
 	for k in g.nodes:
@@ -131,27 +125,35 @@ def dot_from_project(project:Project)->str:
 			if s.name==name:
 				return s.addon
 		return ""
-	clusters:dict={}
+	clusters:dict[str,str]={}
 	for s in project.scripts:
 		classes:set[str]=set([s.name]).union(s.dependencies)
 		for c in classes:
 			addon:str=get_class_addon(project,c)
 			if addon!="" and g.contains(c):
 				clusters[addon]=clusters.get(addon,"")+'"'+c+'"'+"\n"
-	cluster=""
-	for k,v in clusters.items():
-		cluster=v
-		cluster+=f'label="{k}"'
-		cluster:str=formatting.wrap_indented_block(cluster)
-		cluster=f"subgraph cluster_{k} "+cluster
-	body+=cluster
+	# cluster=""
+	# for k,v in clusters.items():
+	# 	cluster=v
+	# 	cluster+=f'label="{k}"'
+	# 	cluster:str=formatting.wrap_indented_block(cluster)
+	# 	cluster=f"subgraph cluster_{k} "+cluster
+	# 	body+=cluster
 
-	output:str="digraph "+formatting.wrap_indented_block(body)
+	body+="\n".join(f"subgraph cluster_{k} "+\
+		wrap_indented_block(v+f'label="{k}"')\
+		for k,v in clusters.items())
+
+	# Wrap it all.
+	digraph_stuff:str=";\n".join((
+		"rankdir=LR", # Left to right.
+		'',
+	))
+	output:str="digraph "+wrap_indented_block(digraph_stuff+body)
 	return output
 
 def main()->None:
 	""" main() """
-
 	args:argparse.Namespace=parse_arguments()
 	p:Project=Project.open(args)
 	output:str=dot_from_project(p)

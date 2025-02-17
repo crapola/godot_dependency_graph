@@ -16,6 +16,11 @@ class Graph:
 			self.nodes[a]=set()
 		self.nodes[a].add(b)
 
+	def remove(self,node_name:str)->None:
+		self.nodes.pop(node_name)
+		for s in self.nodes.values():
+			s.discard(node_name)
+
 	def contains(self,node_name:str)->bool:
 		""" Check if graph has <node_name>. """
 		is_key:bool=node_name in self.nodes
@@ -41,20 +46,16 @@ class Graph:
 						i+=self.count_upstream(k)
 		return i
 
-	def rank(self)->str:
-		""" Rank nodes and return string containing DOT rank instructions. """
-		rank_dict:dict=swapped_dict({k:len(v) for k,v in self.nodes.items()})
-		sorted_ranks:list=sorted(rank_dict.items(),reverse=True)
-		print(sorted_ranks)
-		return "\n".join(["{rank=same;"+";".join(x[1])+";}" for x in sorted_ranks])
+	def is_bidirectional(self,a:str,b:str)->bool:
+		""" Check a <-> b. """
+		return b in self.nodes.get(a,{}) and a in self.nodes.get(b,{})
 
-	def __str__(self)->str:
-		""" DOT language output. """
-		s:str=""
-		for k,v in self.nodes.items():
-			for b in v:
-				s+=f'"{k}" -> "{b}";\n'
-		return s
+	# def rank(self)->str:
+	# 	""" Rank nodes and return string containing DOT rank instructions. """
+	# 	rank_dict:dict=swapped_dict({k:len(v) for k,v in self.nodes.items()})
+	# 	sorted_ranks:list=sorted(rank_dict.items(),reverse=True)
+	# 	print(sorted_ranks)
+	# 	return "\n".join(["{rank=same;"+";".join(x[1])+";}" for x in sorted_ranks])
 
 def swapped_dict(d:dict)->dict:
 	""" Return new dict where keys and values are swapped. """

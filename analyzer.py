@@ -46,11 +46,17 @@ def parse_script(text:str)->tuple[str|None,set[str]]:
 	collected_tokens=set(x.value for x in list(tokens))
 	if extends:
 		collected_tokens.add(extends)
-	# Split combined types such as Array[float].
+	# Split combined types such as Foo.Bar or Array[float].
 	x:str
 	removed:list=[]
 	added:list=[]
 	for x in collected_tokens:
+		if "." in x and False: # TODO
+			types:list[str]=x.split(".")
+			print(types)
+			removed.append(x)
+			if x not in godot_built_in_types():
+				added+=[types[0]]
 		if "[" in x:# or "." in x:
 			types:list[str]=x.replace(".","[").replace("]","[").split("[")[:2]
 			removed.append(x)

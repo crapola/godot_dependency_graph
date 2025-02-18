@@ -23,7 +23,7 @@ def parse_script(text:str)->tuple[str|None,set[str]]:
 	Raise a SyntaxError if parsing fails.
 	"""
 	try:
-		tree=gdtoolkit.parser.parser.parse(text)
+		tree:lark.Tree=gdtoolkit.parser.parser.parse(text)
 	except lark.exceptions.UnexpectedInput as e:
 		#raise e
 		raise SyntaxError("Parse error",("", e.line, e.column, e.get_context(text))) from e
@@ -42,32 +42,19 @@ def parse_script(text:str)->tuple[str|None,set[str]]:
 	# Type hints.
 	def predicate_type_hints(x)->bool:
 		return isinstance(x,lark.Token) and x.type=='TYPE_HINT'
-	tokens=tree.scan_values(predicate_type_hints)
+	tokens:typing.Iterator=tree.scan_values(predicate_type_hints)
 	collected_tokens=set(x.value for x in list(tokens))
 	if extends:
 		collected_tokens.add(extends)
-	# Split combined types such as Foo.Bar or Array[float].
+	# Split combined types such as A.B, Array[float], Dictionary[A,B].
+	# Use a tuple so we can modify the actual set during iteration.
 	x:str
-	removed:list=[]
-	added:list=[]
-	for x in collected_tokens:
-		if "." in x and False: # TODO
-			types:list[str]=x.split(".")
-			print(types)
-			removed.append(x)
-			if x not in godot_built_in_types():
-				added+=[types[0]]
-		if "[" in x:# or "." in x:
-			types:list[str]=x.replace(".","[").replace("]","[").split("[")[:2]
-			removed.append(x)
-			added+=types
-	if removed:
-		for x in removed:
-			collected_tokens.remove(x)
-	if added:
-		for x in added:
-			collected_tokens.add(x)
-
+	for x in tuple(collected_tokens):
+		if "[" in x or "." in x:
+			types:list[str]=x.replace(",","[").replace(".","[").replace("]","[").split("[")[:-1]
+			#print(x," split into ",types)
+			collected_tokens.discard(x)
+			collected_tokens.update(set(types))
 	# Remove built-in types.
 	godot_types:set[str]=godot_built_in_types()
 	collected_tokens.difference_update(godot_types)

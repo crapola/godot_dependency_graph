@@ -2,33 +2,40 @@
 Text formatting and dot generation.
 """
 
+from pathlib import Path
 from typing import Iterable, Sequence
 
 from graph import Graph
 from project import Project
-from pathlib import Path
 
 Lines=Iterable[str]
 
 def indent(lines:Lines)->Lines:
+	""" Indent lines of text with a tab character. """
 	return ["\t"+x for x in lines]
 
 def join_lines(lines:Lines)->str:
+	""" Join list of strings with newline character. """
 	return "\n".join(lines)
 
 def wrap(left:str,center:str,right:str)->str:
+	""" Wrap <center> with <left> and <right>. """
 	return f'{left}{center}{right}'
 
 def quotes(string:str)->str:
+	""" Wrap <string> in double quotes. """
 	return wrap('"',string,'"')
 
 def indent_block(lines:Lines)->str:
+	""" Indent a block and surround with braces. """
 	return join_lines(('{',*indent(lines),'}'))
 
-def nodes(graph:Graph)->list[str]:
+def node_edges(graph:Graph)->list[str]:
 	""" Output node edges. """
 	lines:list[str]=[]
-	bidirs=set(frozenset({a,b}) for a,x in graph.nodes.items() for b in x if graph.is_bidirectional(a,b))
+	bidirs=set(frozenset({a,b}) for a,x in graph.nodes.items()\
+			for b in x\
+			if graph.is_bidirectional(a,b))
 	for a,b in bidirs:
 		lines.append(f'"{a}" -> "{b}" [dir=both;color=red;]')
 	for k,v in graph.nodes.items():
@@ -40,7 +47,7 @@ def nodes(graph:Graph)->list[str]:
 def clusters(project:Project,graph:Graph)->list[str]:
 	""" Create folders subgraphs. """
 	lines:list[str]=[]
-	dirs=dict()
+	dirs:dict[Sequence[Path],list[str]]={}
 	for script in project.scripts:
 		parents:Sequence[Path]=script.path.parents
 		dirs[parents]=dirs.get(parents,[])+[script.name]
@@ -72,7 +79,7 @@ def dot_from_project(project:Project,folders=True)->str:
 			g.add(script.name,d)
 
 	# Node edges.
-	lines:list[str]=nodes(g)
+	lines:list[str]=node_edges(g)
 
 	# Folders in clusters.
 	if folders:
@@ -88,4 +95,3 @@ def dot_from_project(project:Project,folders=True)->str:
 	#lines.insert(0,"")
 	output:str="digraph"+indent_block(lines)
 	return output
-

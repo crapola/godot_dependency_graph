@@ -17,6 +17,7 @@ class Graph:
 		self.nodes[a].add(b)
 
 	def remove(self,node_name:str)->None:
+		""" Remove <node_name> from the graph. """
 		self.nodes.pop(node_name)
 		for s in self.nodes.values():
 			s.discard(node_name)
